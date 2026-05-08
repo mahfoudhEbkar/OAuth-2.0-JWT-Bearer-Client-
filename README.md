@@ -13,13 +13,15 @@ For the full set of architectural rules, security constraints, and the Java 8 co
 
 Everything you need on a fresh Windows PC. Each tool has a winget one-liner **and** a direct-download fallback for restricted/corporate machines where winget is blocked.
 
+> **About the winget flags.** Every command below includes `--accept-source-agreements --accept-package-agreements`. Without them, winget pauses for a `Y/N` confirmation that **cannot be answered from non-interactive terminals** (IntelliJ's Terminal, VS Code's, scripted runs, etc.) — your install hangs forever and `Y` does nothing. The flags pre-accept both prompts so the install runs straight through.
+
 ### Required for every path
 
 #### 1. IntelliJ IDEA Community
 
 | Method | Command / URL |
 |---|---|
-| winget | `winget install JetBrains.IntelliJIDEA.Community` |
+| winget | `winget install JetBrains.IntelliJIDEA.Community --accept-source-agreements --accept-package-agreements` |
 | Direct | <https://www.jetbrains.com/idea/download/?section=windows> (Community, free) |
 
 #### 2. A JDK 17 (any of the three options below)
@@ -32,7 +34,7 @@ You don't need to install a JDK system-wide if IntelliJ is enough — pick the o
 
   | Method | Command / URL |
   |---|---|
-  | winget | `winget install EclipseAdoptium.Temurin.17.JDK` |
+  | winget | `winget install EclipseAdoptium.Temurin.17.JDK --accept-source-agreements --accept-package-agreements` |
   | Direct | <https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64> (Temurin 17 LTS, `.msi`) |
 
 For the **Run from IntelliJ** path below, any of A / B / C works. The keytool snippet auto-locates whichever you have.
@@ -43,7 +45,7 @@ For the **Run from IntelliJ** path below, any of A / B / C works. The keytool sn
 
 | Method | Command / URL |
 |---|---|
-| winget | `winget install Git.Git` |
+| winget | `winget install Git.Git --accept-source-agreements --accept-package-agreements` |
 | Direct | <https://git-scm.com/downloads/win> |
 
 If you skip Git: download the repo ZIP from GitHub → Code → "Download ZIP" → extract.
@@ -66,7 +68,7 @@ The IntelliJ path uses `keytool` from the JDK, so OpenSSL is unnecessary. You on
 
 | Method | Command / URL |
 |---|---|
-| winget | `winget install ShiningLight.OpenSSL.Light` |
+| winget | `winget install ShiningLight.OpenSSL.Light --accept-source-agreements --accept-package-agreements` |
 | Direct | <https://slproweb.com/products/Win32OpenSSL.html> ("Win64 OpenSSL Light" installer) |
 
 ### Quick install matrix — what each path needs
