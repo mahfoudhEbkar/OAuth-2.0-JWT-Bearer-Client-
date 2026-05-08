@@ -33,12 +33,28 @@ Maven reimports automatically. Wait for the bottom-right progress bar to clear.
 
 `View` → `Tool Windows` → `Terminal`. The default Win 11 shell is PowerShell — paste:
 
-This snippet auto-locates the JDK IntelliJ downloaded (under `%USERPROFILE%\.jdks\…`) and runs `keytool` from there — works even when the JDK is not on system `PATH`:
+This snippet finds `keytool.exe` from **any** JDK on the machine (IntelliJ-downloaded, standalone Temurin/Java/Microsoft/etc., or IntelliJ's own bundled JetBrains Runtime), so it works even when no JDK is on the system `PATH`:
 
 ```powershell
-$keytool = (Get-ChildItem "$env:USERPROFILE\.jdks" -Recurse -Filter "keytool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
-if (-not $keytool) { $keytool = (Get-ChildItem "C:\Program Files\Eclipse Adoptium" -Recurse -Filter "keytool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
-if (-not $keytool) { throw "keytool.exe not found - download a JDK via Project Structure first" }
+$searchPaths = @(
+    "$env:USERPROFILE\.jdks",
+    "C:\Program Files\Eclipse Adoptium",
+    "C:\Program Files\Java",
+    "C:\Program Files\Microsoft",
+    "C:\Program Files\BellSoft",
+    "C:\Program Files\Amazon Corretto",
+    "C:\Program Files\Zulu",
+    "C:\Program Files\JetBrains"
+)
+$keytool = $null
+foreach ($p in $searchPaths) {
+    if (Test-Path $p) {
+        $found = Get-ChildItem -Path $p -Recurse -Filter "keytool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { $keytool = $found.FullName; break }
+    }
+}
+if (-not $keytool) { $cmd = Get-Command keytool -ErrorAction SilentlyContinue; if ($cmd) { $keytool = $cmd.Source } }
+if (-not $keytool) { throw "keytool.exe not found - install a JDK or open Project Structure -> SDKs -> Download JDK first" }
 Write-Host "Using: $keytool"
 
 New-Item -ItemType Directory -Force keys | Out-Null
