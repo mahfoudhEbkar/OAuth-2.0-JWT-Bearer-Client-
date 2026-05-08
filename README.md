@@ -33,25 +33,22 @@ Maven reimports automatically. Wait for the bottom-right progress bar to clear.
 
 `View` → `Tool Windows` → `Terminal`. The default Win 11 shell is PowerShell — paste:
 
+This snippet auto-locates the JDK IntelliJ downloaded (under `%USERPROFILE%\.jdks\…`) and runs `keytool` from there — works even when the JDK is not on system `PATH`:
+
 ```powershell
+$keytool = (Get-ChildItem "$env:USERPROFILE\.jdks" -Recurse -Filter "keytool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName
+if (-not $keytool) { $keytool = (Get-ChildItem "C:\Program Files\Eclipse Adoptium" -Recurse -Filter "keytool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1).FullName }
+if (-not $keytool) { throw "keytool.exe not found - download a JDK via Project Structure first" }
+Write-Host "Using: $keytool"
+
 New-Item -ItemType Directory -Force keys | Out-Null
-keytool -genkeypair -keyalg RSA -keysize 2048 -alias oauth2-client `
-  -keystore keys\oauth2-client.p12 -storetype PKCS12 `
-  -storepass changeit -keypass changeit `
-  -dname "CN=oauth2-jwt-client, O=Odea, C=US" -validity 365
-keytool -exportcert -alias oauth2-client -keystore keys\oauth2-client.p12 `
-  -storetype PKCS12 -storepass changeit -rfc -file keys\oauth2-client.crt
+& $keytool -genkeypair -keyalg RSA -keysize 2048 -alias oauth2-client -keystore keys\oauth2-client.p12 -storetype PKCS12 -storepass changeit -keypass changeit -dname "CN=oauth2-jwt-client, O=Odea, C=US" -validity 365
+& $keytool -exportcert -alias oauth2-client -keystore keys\oauth2-client.p12 -storetype PKCS12 -storepass changeit -rfc -file keys\oauth2-client.crt
 ```
 
-This uses **`keytool`** which ships with every JDK — no OpenSSL needed. Produces the same PKCS12 keystore the app expects (alias `oauth2-client`, password `changeit`).
+`keytool` ships with every JDK — no OpenSSL needed. Produces the PKCS12 keystore the app expects (alias `oauth2-client`, password `changeit`).
 
-If your terminal is `cmd` instead of PowerShell, use this equivalent:
-
-```cmd
-if not exist keys mkdir keys
-keytool -genkeypair -keyalg RSA -keysize 2048 -alias oauth2-client -keystore keys\oauth2-client.p12 -storetype PKCS12 -storepass changeit -keypass changeit -dname "CN=oauth2-jwt-client, O=Odea, C=US" -validity 365
-keytool -exportcert -alias oauth2-client -keystore keys\oauth2-client.p12 -storetype PKCS12 -storepass changeit -rfc -file keys\oauth2-client.crt
-```
+> **If you see** `keytool : The term 'keytool' is not recognized…` from a different snippet, your JDK's `bin/` is not on system PATH. The auto-locating snippet above handles this — use it instead.
 
 The `keys/` folder is `.gitignored`, so this stays local to the machine.
 
