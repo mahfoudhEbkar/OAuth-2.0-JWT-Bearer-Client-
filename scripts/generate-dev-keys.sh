@@ -7,50 +7,55 @@ KEYS_DIR="${REPO_ROOT}/keys"
 
 ALIAS="${ALIAS:-oauth2-client}"
 PASSWORD="${PASSWORD:-changeit}"
-SUBJECT="${SUBJECT:-/CN=oauth2-jwt-client/O=Odea Integrations/C=US}"
+DNAME="${DNAME:-CN=oauth2-jwt-client, O=Odea Integrations, C=US}"
 DAYS="${DAYS:-365}"
 
 mkdir -p "${KEYS_DIR}"
-cd "${KEYS_DIR}"
 
-# Locate openssl: prefer PATH, fall back to common Windows install dir for Git Bash users.
-OPENSSL_BIN="${OPENSSL_BIN:-}"
-if [ -z "${OPENSSL_BIN}" ]; then
-    if command -v openssl >/dev/null 2>&1; then
-        OPENSSL_BIN="openssl"
-    elif [ -x "/c/Program Files/OpenSSL-Win64/bin/openssl.exe" ]; then
-        OPENSSL_BIN="/c/Program Files/OpenSSL-Win64/bin/openssl.exe"
-    else
-        echo "ERROR: openssl not found on PATH or at /c/Program Files/OpenSSL-Win64/bin/openssl.exe" >&2
-        echo "Install OpenSSL or set OPENSSL_BIN=<full path> and retry." >&2
-        exit 1
-    fi
+# Locate keytool: prefer PATH, then JAVA_HOME, then common JDK install dirs.
+KEYTOOL="${KEYTOOL:-}"
+if [ -z "${KEYTOOL}" ] && command -v keytool >/dev/null 2>&1; then
+    KEYTOOL="keytool"
 fi
-echo "Using OpenSSL: ${OPENSSL_BIN}"
+if [ -z "${KEYTOOL}" ] && [ -n "${JAVA_HOME:-}" ] && [ -x "${JAVA_HOME}/bin/keytool" ]; then
+    KEYTOOL="${JAVA_HOME}/bin/keytool"
+fi
+if [ -z "${KEYTOOL}" ]; then
+    for base in \
+        "${HOME}/.jdks" \
+        "/c/Program Files/Eclipse Adoptium" \
+        "/c/Program Files/Java" \
+        "/c/Program Files/JetBrains" \
+        "/usr/lib/jvm" \
+        "/Library/Java/JavaVirtualMachines"; do
+        if [ -d "$base" ]; then
+            found=$(find "$base" -name keytool -o -name keytool.exe 2>/dev/null | head -n 1)
+            if [ -n "$found" ]; then KEYTOOL="$found"; break; fi
+        fi
+    done
+fi
+if [ -z "${KEYTOOL}" ]; then
+    echo "ERROR: keytool not found. Install a JDK 17 or set KEYTOOL=<full path>." >&2
+    exit 1
+fi
+echo "Using keytool: ${KEYTOOL}"
 
-echo "Generating RSA private key (2048-bit)..."
-"${OPENSSL_BIN}" genrsa -out oauth2-client.key 2048
+echo "Generating RSA private key + self-signed cert (PKCS12 keystore)..."
+"${KEYTOOL}" -genkeypair -keyalg RSA -keysize 2048 -alias "${ALIAS}" \
+    -keystore "${KEYS_DIR}/oauth2-client.p12" -storetype PKCS12 \
+    -storepass "${PASSWORD}" -keypass "${PASSWORD}" \
+    -dname "${DNAME}" -validity "${DAYS}"
 
-echo "Generating CSR..."
-"${OPENSSL_BIN}" req -new -key oauth2-client.key -out oauth2-client.csr -subj "${SUBJECT}"
-
-echo "Self-signing certificate (${DAYS} days)..."
-"${OPENSSL_BIN}" x509 -req -days "${DAYS}" -in oauth2-client.csr -signkey oauth2-client.key -out oauth2-client.crt
-
-echo "Building PKCS12 keystore..."
-"${OPENSSL_BIN}" pkcs12 -export \
-    -in oauth2-client.crt \
-    -inkey oauth2-client.key \
-    -name "${ALIAS}" \
-    -out oauth2-client.p12 \
-    -password "pass:${PASSWORD}"
+echo "Exporting public certificate (PEM)..."
+"${KEYTOOL}" -exportcert -alias "${ALIAS}" \
+    -keystore "${KEYS_DIR}/oauth2-client.p12" -storetype PKCS12 \
+    -storepass "${PASSWORD}" -rfc \
+    -file "${KEYS_DIR}/oauth2-client.crt"
 
 echo
 echo "Created files:"
-echo "  ${KEYS_DIR}/oauth2-client.key   (private key, do not share)"
-echo "  ${KEYS_DIR}/oauth2-client.csr   (certificate request)"
-echo "  ${KEYS_DIR}/oauth2-client.crt   (public certificate, give to AS admin)"
 echo "  ${KEYS_DIR}/oauth2-client.p12   (PKCS12 keystore loaded by the app)"
+echo "  ${KEYS_DIR}/oauth2-client.crt   (public certificate, give to AS admin)"
 echo
 echo "Environment variables to set:"
 echo "  OAUTH2_KEYSTORE_PATH=${KEYS_DIR}/oauth2-client.p12"

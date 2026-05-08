@@ -62,21 +62,14 @@ Tomcat 9 is **not on winget**. Download directly:
 
 > Use Tomcat **9**, not 10. Tomcat 10 moved to the `jakarta.*` namespace and is incompatible with Spring Boot 2.7.
 
-#### 5. OpenSSL (**not needed** if you follow the IntelliJ path)
-
-The IntelliJ path uses `keytool` from the JDK, so OpenSSL is unnecessary. You only need OpenSSL if you want to run the legacy `scripts\generate-dev-keys.bat` from a shell.
-
-| Method | Command / URL |
-|---|---|
-| winget | `winget install ShiningLight.OpenSSL.Light --accept-source-agreements --accept-package-agreements` |
-| Direct | <https://slproweb.com/products/Win32OpenSSL.html> ("Win64 OpenSSL Light" installer) |
+> **You do not need OpenSSL.** The included `scripts\generate-dev-keys.bat` and `generate-dev-keys.sh` both use `keytool` (which ships with every JDK) to produce the PKCS12 keystore + the public PEM cert. No third-party crypto tooling required.
 
 ### Quick install matrix — what each path needs
 
-| Path | IntelliJ | JDK 17 | Tomcat 9 | OpenSSL | Git |
-|---|---|---|---|---|---|
-| **Run from IntelliJ** (embedded Tomcat) | required | any of A/B/C | not needed | not needed | optional |
-| **Standalone Tomcat deploy** | optional | required (system-wide) | required | not needed (use keytool) | optional |
+| Path | IntelliJ | JDK 17 | Tomcat 9 | Git |
+|---|---|---|---|---|
+| **Run from IntelliJ** (embedded Tomcat) | required | any of A/B/C | not needed | optional |
+| **Standalone Tomcat deploy** | optional | required (system-wide) | required | optional |
 
 ---
 
