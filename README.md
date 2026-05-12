@@ -186,9 +186,142 @@ Expected:
 
 Stop with the red ■ in the Run window.
 
-### Want to deploy to a separate Tomcat install instead?
+---
 
-For verifying the production-shaped deploy (an external Tomcat 9, not the embedded one), see [§ Deploy to standalone Apache Tomcat 9](#5-deploy-to-standalone-apache-tomcat-9) below. That path requires installing Tomcat as a separate server, which is outside IntelliJ's scope.
+## Deploy to standalone Tomcat 9 via Smart Tomcat (IntelliJ)
+
+Use this path when you have a separate Tomcat 9 installation and want IntelliJ to deploy the WAR into it (mimics production layout). End state: app running at `http://localhost:8080/oauth2-jwt-client/api/health`, served by the external Tomcat process, started and stopped from inside IntelliJ.
+
+### Prereqs for this path
+
+- **IntelliJ** + **JDK 17 (Temurin)** — see Prerequisites #1 and #2 above.
+- **Tomcat 9** extracted to a known folder — see Prerequisites #4. Example: `C:\apache-tomcat-9.0.117`.
+- **SmartTomcat plugin** — `File` → `Settings` → `Plugins` → **Marketplace** tab → search **`SmartTomcat`** (one word) → **Install** → restart IDE.
+
+### 1. Open the project
+
+`File` → `New` → `Project from Version Control` → URL: `https://github.com/mahfoudhEbkar/OAuth-2.0-JWT-Bearer-Client-.git` → Clone. Or open the existing folder via `File` → `Open` and select `pom.xml`.
+
+Wait for Maven to finish importing (bottom-right progress bar).
+
+### 2. Generate the keystore (no script needed)
+
+`View` → `Tool Windows` → `Terminal`. Paste this **whole block** into the terminal and press Enter — it auto-locates `keytool.exe` inside the Temurin JDK you installed, no script file or `git pull` needed:
+
+```powershell
+$searchPaths = @(
+    "$env:USERPROFILE\.jdks",
+    "C:\Program Files\Eclipse Adoptium",
+    "C:\Program Files\Java",
+    "C:\Program Files\Microsoft",
+    "C:\Program Files\BellSoft",
+    "C:\Program Files\Amazon Corretto",
+    "C:\Program Files\Zulu",
+    "C:\Program Files\JetBrains"
+)
+$keytool = $null
+foreach ($p in $searchPaths) {
+    if (Test-Path $p) {
+        $found = Get-ChildItem -Path $p -Recurse -Filter "keytool.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($found) { $keytool = $found.FullName; break }
+    }
+}
+if (-not $keytool) { throw "keytool.exe not found - install Temurin 17 or download a JDK via Project Structure first" }
+Write-Host "Using: $keytool"
+
+New-Item -ItemType Directory -Force keys | Out-Null
+& $keytool -genkeypair -keyalg RSA -keysize 2048 -alias oauth2-client -keystore keys\oauth2-client.p12 -storetype PKCS12 -storepass changeit -keypass changeit -dname "CN=oauth2-jwt-client, O=Odea, C=US" -validity 365
+& $keytool -exportcert -alias oauth2-client -keystore keys\oauth2-client.p12 -storetype PKCS12 -storepass changeit -rfc -file keys\oauth2-client.crt
+```
+
+Expected output (path will reflect your install):
+```
+Using: C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot\bin\keytool.exe
+Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) with a validity of 365 days
+        for: CN=oauth2-jwt-client, O=Odea, C=US
+Certificate stored in file <keys\oauth2-client.crt>
+```
+
+Two files created: `keys\oauth2-client.p12` (the keystore the app loads) and `keys\oauth2-client.crt` (the public certificate you hand to the AS admin once you go beyond local smoke testing).
+
+> **You do not need OpenSSL or cryptotools.net or any other tool.** `keytool.exe` is part of the Temurin JDK you installed in Prereq #2. The snippet finds it automatically and uses it to produce the exact PKCS12 format the app's `KeyStoreLoader` expects, with the alias `oauth2-client` set correctly.
+
+### 3. Build the exploded WAR
+
+Smart Tomcat deploys a directory layout, not a `.war` file. Build it once with Maven:
+
+In the **Maven** tool window (right edge → "Maven" tab) → `oauth2-jwt-client` → **Lifecycle** → double-click **`package`**.
+
+Wait for **BUILD SUCCESS**. This creates `target\oauth2-jwt-client\` (with `WEB-INF/classes/` and `WEB-INF/lib/` inside) — that directory is what Smart Tomcat deploys.
+
+### 4. Note your project root path
+
+In the **Project** pane (left), right-click the top folder → `Copy Path/Reference…` → **Absolute Path**. Save the value — call it `<PROJECT_ROOT>`. Example: `C:\Users\you\git\OAuth-2.0-JWT-Bearer-Client-`.
+
+### 5. Create the Smart Tomcat run config
+
+`Run` → `Edit Configurations…` → click **`+`** → choose **Smart Tomcat**. Fill these fields:
+
+| Field | Value |
+|---|---|
+| **Name** | `oauth2-jwt-client` |
+| **Tomcat Server** | Click `Configure` → **`+`** → Name: `Tomcat 9`, Tomcat Home: your Tomcat install dir (e.g. `C:\apache-tomcat-9.0.117`) → OK. Pick it from the dropdown. |
+| **Deployment directory** | `<PROJECT_ROOT>\target\oauth2-jwt-client` |
+| **Context path** | `/oauth2-jwt-client` |
+| **Server port** | `8080` |
+| **Admin port** | `8005` (default) |
+
+### 6. Set environment variables
+
+Same dialog → find **Environment variables** (icon or button) → paste this block, **replacing `<PROJECT_ROOT>`** with the path you copied in Step 4:
+
+```
+OAUTH2_CLIENT_ID=smoketest-client
+OAUTH2_TOKEN_ENDPOINT=https://auth.example.com/oauth2/token
+OAUTH2_SCOPE=api.read
+OAUTH2_KEYSTORE_PATH=<PROJECT_ROOT>\keys\oauth2-client.p12
+OAUTH2_KEYSTORE_PASSWORD=changeit
+OAUTH2_KEY_ALIAS=oauth2-client
+OAUTH2_KEY_PASSWORD=changeit
+OAUTH2_API_BASE_URL=https://api.example.com
+```
+
+When you have real credentials from your AS admin, edit this list and re-run.
+
+### 7. Auto-rebuild the WAR on every Run
+
+Same dialog → bottom **Before launch** section → **`+`** → **Run Maven Goal** → Command line: `package -DskipTests` → OK.
+
+Without this step, code changes won't appear in subsequent runs (Smart Tomcat would keep deploying the stale exploded WAR from Step 3).
+
+### 8. Apply → OK → click the green ▶
+
+In the **Run** tool window watch for:
+```
+Loaded RSA key from keystore: alias=oauth2-client, kid=oauth2-client
+Server startup in [N] milliseconds
+```
+
+### 9. Verify
+
+Open in browser: **`http://localhost:8080/oauth2-jwt-client/api/health`**
+
+Expected response:
+```json
+{"status":"UP","clientId":"smok****"}
+```
+
+Stop the server with the red ■ in the Run window.
+
+### Common failures on this path
+
+| Symptom | Fix |
+|---|---|
+| `Could not find openssl.exe` from `scripts\generate-dev-keys.bat` | Your local copy of the script is stale. Use the PowerShell snippet in Step 2 above instead — don't run the `.bat`. |
+| Smart Tomcat: `Deployment directory does not exist` | You skipped Step 3. Build with `mvn package` (or the Maven panel's `package` lifecycle) first, then re-open the run config. |
+| `keystore was tampered with, or password was incorrect` | The keystore was created with a different password than what's in your env vars. Defaults are `changeit` everywhere — re-run Step 2. |
+| Browser shows 404 at `/oauth2-jwt-client/api/health` | Either the WAR didn't deploy (check the Run window for stack traces) or the context path in Step 5 doesn't match what you typed in the URL. |
+| Tomcat refuses to start: port 8080 in use | Another process owns 8080. Run `netstat -ano | findstr :8080` in the terminal, kill the PID with `taskkill /F /PID <pid>`, then click ▶ again. |
 
 ---
 
