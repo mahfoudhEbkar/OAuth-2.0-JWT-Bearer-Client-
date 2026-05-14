@@ -448,6 +448,68 @@ curl http://localhost:8080/api/proxy/your/api/path
 |---|---|---|
 | GET | `/api/health` | `{"status":"UP","clientId":"<masked>"}` |
 | GET | `/api/proxy/{*path}` | Forwards to `OAUTH2_API_BASE_URL/{path}` with bearer token |
+| POST | `/api/crypto/encrypt` | RSA-encrypts a JSON string field with the keystore's public key; returns base64 ciphertext |
+| POST | `/api/crypto/decrypt` | RSA-decrypts a base64 ciphertext with the keystore's private key; returns the original plaintext |
+
+### RSA encrypt / decrypt — Postman or curl
+
+Endpoint: **`POST http://localhost:8080/api/crypto/encrypt`** (embedded) or **`http://localhost:8080/oauth2-jwt-client/api/crypto/encrypt`** (standalone Tomcat).
+
+Headers:
+```
+Content-Type: application/json
+```
+
+Request body:
+```json
+{
+  "data": "hello world {\"x\":42}"
+}
+```
+
+Response (HTTP 200):
+```json
+{
+  "algorithm": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
+  "encrypted": "F/ik9nsEpCzWvQVocTFCDrlzso12hfGVId13DaWdDvKSCAMygXFFJkEmKinJZmp0ETipsgsdH7lXlUuwANg3Gw...",
+  "ciphertextLength": 344
+}
+```
+
+Roundtrip with `POST /api/crypto/decrypt`:
+```json
+{
+  "encrypted": "<paste the value from /encrypt here>"
+}
+```
+
+Returns:
+```json
+{
+  "algorithm": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
+  "data": "hello world {\"x\":42}"
+}
+```
+
+curl equivalents:
+```bash
+curl -X POST http://localhost:8080/api/crypto/encrypt \
+  -H "Content-Type: application/json" \
+  -d '{"data":"hello world"}'
+
+curl -X POST http://localhost:8080/api/crypto/decrypt \
+  -H "Content-Type: application/json" \
+  -d '{"encrypted":"<base64>"}'
+```
+
+**Algorithm:** `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` (modern OAEP, IND-CCA2 secure). The "ECB" token in the JCE transformation name is a historical misnomer — it does not mean ECB block-cipher mode (RSA is not a block cipher).
+
+**Size limit:** With a 2048-bit RSA key + OAEP-SHA-256 padding, the maximum plaintext is ~190 bytes. Inputs larger than that return HTTP 400:
+```json
+{"error":"crypto_failure","message":"Plaintext is too large for direct RSA encryption (300 bytes). Max ~190 bytes for RSA-2048 with OAEP-SHA-256. For larger payloads use a hybrid scheme (AES + RSA-wrapped key)."}
+```
+
+For arbitrary-length payloads (entire JSON files, large records), use **hybrid encryption** — generate a random AES-256 key, encrypt the data with AES-GCM, wrap the AES key with RSA, return both. Easy extension to this controller if needed; not implemented today.
 
 ## Switching to Java 1.8 for production
 

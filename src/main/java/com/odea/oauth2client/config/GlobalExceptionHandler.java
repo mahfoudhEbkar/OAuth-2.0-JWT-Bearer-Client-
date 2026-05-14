@@ -1,6 +1,7 @@
 package com.odea.oauth2client.config;
 
 import com.odea.oauth2client.api.ThirdPartyApiException;
+import com.odea.oauth2client.crypto.CryptoException;
 import com.odea.oauth2client.jwt.ClientAssertionException;
 import com.odea.oauth2client.token.TokenAcquisitionException;
 import org.slf4j.Logger;
@@ -47,6 +48,15 @@ public class GlobalExceptionHandler {
         body.put("message", safeMessage(ex));
         body.put("status", ex.getStatus());
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(body);
+    }
+
+    @ExceptionHandler(CryptoException.class)
+    public ResponseEntity<Map<String, Object>> handleCrypto(CryptoException ex) {
+        log.warn("Crypto operation failed: {}", ex.getMessage());
+        Map<String, Object> body = new LinkedHashMap<String, Object>();
+        body.put("error", "crypto_failure");
+        body.put("message", safeMessage(ex));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     @ExceptionHandler(Exception.class)
