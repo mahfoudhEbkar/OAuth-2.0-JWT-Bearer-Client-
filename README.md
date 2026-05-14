@@ -254,9 +254,23 @@ In the **Maven** tool window (right edge → "Maven" tab) → `oauth2-jwt-client
 
 Wait for **BUILD SUCCESS**. This creates `target\oauth2-jwt-client\` (with `WEB-INF/classes/` and `WEB-INF/lib/` inside) — that directory is what Smart Tomcat deploys.
 
-### 4. Note your project root path
+### 4. Get the absolute path to the keystore file
 
-In the **Project** pane (left), right-click the top folder → `Copy Path/Reference…` → **Absolute Path**. Save the value — call it `<PROJECT_ROOT>`. Example: `C:\Users\you\git\OAuth-2.0-JWT-Bearer-Client-`.
+You'll paste this into the env var in Step 6. In the IntelliJ Terminal (which is PowerShell on Windows by default), run:
+
+```powershell
+"$PWD\keys\oauth2-client.p12"
+```
+
+It prints the full absolute path to the keystore file you just created. **Copy that line exactly** — including the `\oauth2-client.p12` at the end. Example output:
+
+```
+C:\Users\you\git\OAuth-2.0-JWT-Bearer-Client-\keys\oauth2-client.p12
+```
+
+> Don't use `echo %CD%` — that's `cmd` syntax and prints the literal `%CD%` in PowerShell. Use `$PWD` instead.
+
+> **About placeholders in this README.** Anywhere you see something in angle brackets like `<PROJECT_ROOT>`, `<your-path>`, or `<vendor>`, that's a placeholder you must **replace entirely** (brackets and all) with the real value on your machine. Pasting the literal text `<PROJECT_ROOT>` as a value is the most common failure on this path.
 
 ### 5. Create the Smart Tomcat run config
 
@@ -273,20 +287,24 @@ In the **Project** pane (left), right-click the top folder → `Copy Path/Refere
 
 ### 6. Set environment variables
 
-Same dialog → find **Environment variables** (icon or button) → paste this block, **replacing `<PROJECT_ROOT>`** with the path you copied in Step 4:
+Same dialog → find **Environment variables** → click the small **`…`** icon next to the field to open the multi-row editor.
 
-```
-OAUTH2_CLIENT_ID=smoketest-client
-OAUTH2_TOKEN_ENDPOINT=https://auth.example.com/oauth2/token
-OAUTH2_SCOPE=api.read
-OAUTH2_KEYSTORE_PATH=<PROJECT_ROOT>\keys\oauth2-client.p12
-OAUTH2_KEYSTORE_PASSWORD=changeit
-OAUTH2_KEY_ALIAS=oauth2-client
-OAUTH2_KEY_PASSWORD=changeit
-OAUTH2_API_BASE_URL=https://api.example.com
-```
+Add these 8 rows. **For `OAUTH2_KEYSTORE_PATH`, paste the exact absolute path you got in Step 4** — not the placeholder:
 
-When you have real credentials from your AS admin, edit this list and re-run.
+| Name | Value |
+|---|---|
+| `OAUTH2_CLIENT_ID` | `smoketest-client` |
+| `OAUTH2_TOKEN_ENDPOINT` | `https://auth.example.com/oauth2/token` |
+| `OAUTH2_SCOPE` | `api.read` |
+| `OAUTH2_KEYSTORE_PATH` | (paste Step 4 output here — ends in `\oauth2-client.p12`) |
+| `OAUTH2_KEYSTORE_PASSWORD` | `changeit` |
+| `OAUTH2_KEY_ALIAS` | `oauth2-client` |
+| `OAUTH2_KEY_PASSWORD` | `changeit` |
+| `OAUTH2_API_BASE_URL` | `https://api.example.com` |
+
+> **Critical**: the `OAUTH2_KEYSTORE_PATH` value must end with `\oauth2-client.p12` (the filename), **not** with `\keys` (the folder). Drag the Value column wider in the dialog to verify the full path is what you intend — IntelliJ truncates long values in the display.
+
+When you have real credentials from your AS admin, edit these values and re-run.
 
 ### 7. Auto-rebuild the WAR on every Run
 
@@ -318,10 +336,16 @@ Stop the server with the red ■ in the Run window.
 | Symptom | Fix |
 |---|---|
 | `Could not find openssl.exe` from `scripts\generate-dev-keys.bat` | Your local copy of the script is stale. Use the PowerShell snippet in Step 2 above instead — don't run the `.bat`. |
+| `Keystore file not found: ${OAUTH2_KEYSTORE_PATH}` | You never set the env var. Spring left the literal placeholder. Open Run → Edit Configurations and add the env vars (Step 6). |
+| `Keystore file not found: <PROJECT_ROOT>\keys\oauth2-client.p12` | You pasted the literal placeholder `<PROJECT_ROOT>` as the env var value. Replace it with the actual absolute path from Step 4. |
+| `Keystore file not found: C:\...\keys` (path ends at folder, no filename) | Your env var ends at `\keys` instead of `\keys\oauth2-client.p12`. Append `\oauth2-client.p12` to the value. |
+| `keytool error: Key pair not generated, alias <oauth2-client> already exists` | A leftover keystore from a previous run is in the way. Delete the `keys` folder (`Remove-Item -Recurse -Force keys` in PowerShell) and re-run Step 2. |
+| `keystore was tampered with, or password was incorrect` | The keystore was created with a different password than what's in your env vars. Defaults are `changeit` everywhere — delete `keys` folder, re-run Step 2. |
 | Smart Tomcat: `Deployment directory does not exist` | You skipped Step 3. Build with `mvn package` (or the Maven panel's `package` lifecycle) first, then re-open the run config. |
-| `keystore was tampered with, or password was incorrect` | The keystore was created with a different password than what's in your env vars. Defaults are `changeit` everywhere — re-run Step 2. |
 | Browser shows 404 at `/oauth2-jwt-client/api/health` | Either the WAR didn't deploy (check the Run window for stack traces) or the context path in Step 5 doesn't match what you typed in the URL. |
-| Tomcat refuses to start: port 8080 in use | Another process owns 8080. Run `netstat -ano | findstr :8080` in the terminal, kill the PID with `taskkill /F /PID <pid>`, then click ▶ again. |
+| `localhost:8080/api/health` returns 404 but `localhost:8080/oauth2-jwt-client/api/health` would have worked | The Smart Tomcat (standalone) path uses the WAR filename as context root. Always include `/oauth2-jwt-client/` in the URL on this path. |
+| Tomcat refuses to start: port 8080 in use | Another process owns 8080. Run `netstat -ano \| findstr :8080` in the terminal, kill the PID with `taskkill /F /PID <pid>`, then click ▶ again. |
+| `echo %CD%` prints the literal `%CD%` | You're in PowerShell, which doesn't use `%VAR%` syntax. Use `$PWD` or `$PWD.Path` instead. |
 
 ---
 
