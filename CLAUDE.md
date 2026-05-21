@@ -23,7 +23,7 @@ OAuth 2.0 client that:
 
 ## Hard constraints — do not change without permission
 
-- **Java**: source/target/release = **Java 1.8** (`<java.version>1.8</java.version>` + `<maven.compiler.release>8</maven.compiler.release>`). Build on JDK 9+ (CI uses JDK 17); `--release 8` enforces both Java 8 syntax AND the Java 8 API surface, so Java 9+ methods like `List.of`, `Optional.isEmpty`, `Stream.toList`, text blocks, etc. fail at compile time, not at runtime on the production JVM. Do NOT remove `maven.compiler.release`.
+- **Java**: **JDK 1.8 end-to-end**. Source = 1.8, target = 1.8, build JDK = Temurin 8, CI uses Temurin 8, production runtime = Java 8 Tomcat 9. Set in `pom.xml` as `<java.version>1.8</java.version>`. We do NOT set `<maven.compiler.release>` because `--release` requires JDK 9+; with JDK 8 the API surface is enforced by the build JDK itself (`List.of`, `Optional.isEmpty`, `Stream.toList`, text blocks, etc. simply don't exist in JDK 8's `rt.jar`). Do NOT add `maven.compiler.release` back — it would force the build environment to JDK 9+.
 - **Spring Boot**: 2.7.18 (last 2.7.x release; last line that supports Java 8).
 - **Packaging**: `war`. `spring-boot-starter-tomcat` MUST be `provided` scope. `ServletInitializer` extends `SpringBootServletInitializer`. The Spring Boot Maven plugin repackages the WAR so the **same** `target/oauth2-jwt-client.war` is both (a) deployable to an external Tomcat 9 (provided-scope Tomcat jars land in `WEB-INF/lib-provided`, which external containers ignore) AND (b) executable standalone as `java -jar oauth2-jwt-client.war` (the Spring Boot launcher uses `WEB-INF/lib-provided` to bring up embedded Tomcat). One artifact, two deployment modes. Do NOT split into a separate jar build.
 - **JWT library**: `com.nimbusds:nimbus-jose-jwt:9.37.3` (last 9.x line that supports Java 8). DO NOT upgrade to 10.x.
@@ -150,7 +150,7 @@ scripts/
 
 A change is done when ALL of these are true:
 
-1. `mvn clean compile` succeeds (build JDK is 9+; output is Java 8 bytecode via `--release 8`).
+1. `mvn clean compile` succeeds on Temurin 8 (output is Java 8 bytecode; build JDK is itself Java 8, so Java 9+ APIs cannot be referenced).
 2. `mvn test` is green.
 3. `mvn clean verify` is green.
 4. The repackaged WAR runs both ways:
@@ -188,6 +188,6 @@ mvn help:effective-pom
 
 ## When in doubt
 
-- Need to add a dependency? Pin a version that supports Java 8 runtime, even though we build on 17.
+- Need to add a dependency? Pin a version that supports Java 8 — that's what we both build on and ship to.
 - Need to log something near tokens/keys? Mask it. Re-read the Security checklist.
 - Need to deploy somewhere new? The WAR runs on Tomcat 9 with externalized env vars. Tomcat 10 will not work.

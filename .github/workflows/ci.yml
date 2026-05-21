@@ -12,16 +12,16 @@ permissions:
 
 jobs:
   build:
-    name: Build and test (JDK 17)
+    name: Build and test (JDK 8)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Temurin 17
+      - name: Set up Temurin 8
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '8'
           cache: maven
 
       - name: Show toolchain
@@ -29,6 +29,11 @@ jobs:
           java -version
           mvn -v
 
+      # Build, test, and package on Temurin 8. Because the build JDK is itself
+      # Java 8, the Java 8 API surface is enforced automatically - any call to
+      # a Java 9+ method (Optional.isEmpty, List.of, Stream.toList, text blocks,
+      # etc.) fails to compile here, not at runtime on the production JVM. No
+      # separate compat job needed.
       - name: Build, test, package
         run: mvn -B -ntp clean verify
 
@@ -38,26 +43,3 @@ jobs:
           name: oauth2-jwt-client-war
           path: target/oauth2-jwt-client.war
           if-no-files-found: error
-
-  java8-compat:
-    name: Java 8 source-compat check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Temurin 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      # --release 8 enforces both Java 8 syntax AND Java 8 API surface.
-      # If this job fails, something in the codebase started depending on a
-      # JDK 9+ method (e.g. Optional.isEmpty(), List.of(), Stream.toList()).
-      - name: Compile with --release 8
-        run: >
-          mvn -B -ntp clean test
-          -Dmaven.compiler.release=8
-          -Dmaven.compiler.source=8
-          -Dmaven.compiler.target=8

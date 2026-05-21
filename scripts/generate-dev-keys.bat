@@ -65,7 +65,7 @@ exit /b 1
 :no_keytool
 echo.
 echo Could not find keytool.exe. Either:
-echo   - Install a JDK 17 ^(winget install EclipseAdoptium.Temurin.17.JDK^), OR
-echo   - Open IntelliJ -^> Project Structure -^> SDKs -^> Download JDK -^> Temurin 17, OR
+echo   - Install a JDK 1.8 ^(winget install EclipseAdoptium.Temurin.8.JDK^), OR
+echo   - Open IntelliJ -^> Project Structure -^> SDKs -^> Download JDK -^> Temurin 8, OR
 echo   - Set the KEYTOOL env var to its full path and rerun.
 exit /b 1

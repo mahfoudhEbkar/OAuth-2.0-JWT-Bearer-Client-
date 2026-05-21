@@ -24,22 +24,23 @@ Everything you need on a fresh Windows PC. Each tool has a winget one-liner **an
 | winget | `winget install JetBrains.IntelliJIDEA.Community --accept-source-agreements --accept-package-agreements` |
 | Direct | <https://www.jetbrains.com/idea/download/?section=windows> (Community, free) |
 
-#### 2. A JDK to build with (recommended: Temurin 17)
+#### 2. JDK 1.8 (Temurin 8)
 
-> **Why 17 to build but Java 8 to run?** The project compiles to **Java 8 bytecode** (`<java.version>1.8</java.version>` + `<maven.compiler.release>8</maven.compiler.release>` in `pom.xml`) so the WAR runs on the production Java 8 Tomcat 9 host. But Maven needs **JDK 9+** locally to use the `--release 8` flag (JDK 8 itself doesn't support `--release`). Temurin 17 LTS is the team standard — it's what CI uses and what every snippet in this README was tested against.
+> **Why JDK 8 specifically?** The project is **Java 8 end-to-end** — `<java.version>1.8</java.version>` in `pom.xml`, Java 8 bytecode out, runs on the production Java 8 Tomcat 9 host. We use JDK 8 to build too (not 11/17/21) so that any accidental use of a Java 9+ API (`List.of`, `Optional.isEmpty`, `Stream.toList`, text blocks, etc.) fails at `mvn compile`, not at runtime on the production JVM. CI uses Temurin 8 for the same reason.
 
-You don't need to install a JDK system-wide if IntelliJ is enough — pick the option that matches your situation:
+You don't need to install a JDK system-wide if IntelliJ can download one for the project — pick the option that matches your situation:
 
-- **Option A — Use IntelliJ's bundled JetBrains Runtime (JBR).** Already on disk at `C:\Program Files\JetBrains\IntelliJ IDEA <version>\jbr\` after installing IntelliJ. JBR is JDK 17-based. Includes `keytool`. No extra download.
-- **Option B — Let IntelliJ download a JDK for you.** `File` → `Project Structure` → `Project` → `SDK` dropdown → `Add SDK` → **Download JDK** → Vendor: **Eclipse Temurin**, Version: **17**. Lands under `%USERPROFILE%\.jdks\`.
-- **Option C — Install system-wide.**
+- **Option A — Let IntelliJ download a JDK for you (recommended for the IntelliJ path).** `File` → `Project Structure` → `Project` → `SDK` dropdown → `Add SDK` → **Download JDK** → Vendor: **Eclipse Temurin**, Version: **8**. Lands under `%USERPROFILE%\.jdks\`. Includes `keytool`.
+- **Option B — Install system-wide.**
 
   | Method | Command / URL |
   |---|---|
-  | winget | `winget install EclipseAdoptium.Temurin.17.JDK --accept-source-agreements --accept-package-agreements` |
-  | Direct | <https://adoptium.net/temurin/releases/?version=17&os=windows&arch=x64> (Temurin 17 LTS, `.msi`) |
+  | winget | `winget install EclipseAdoptium.Temurin.8.JDK --accept-source-agreements --accept-package-agreements` |
+  | Direct | <https://adoptium.net/temurin/releases/?version=8&os=windows&arch=x64> (Temurin 8 LTS, `.msi`) |
 
-For the **Run from IntelliJ** path below, any of A / B / C works. The keytool snippet auto-locates whichever you have. Any JDK ≥ 9 will technically build (11, 21, etc.), but pick 17 unless you have a reason not to — it's the only version CI exercises.
+> **Note on IntelliJ's bundled JetBrains Runtime (JBR).** JBR is JDK 17-based and is what runs IntelliJ itself — it is **not** suitable as this project's build JDK. Use Option A or B above; the snippet finds whichever you install.
+
+For the **Run from IntelliJ** path below, either A or B works. The keytool snippet auto-locates whichever you have.
 
 ### Optional — only for specific paths
 
@@ -68,12 +69,12 @@ Tomcat 9 is **not on winget**. Download directly:
 
 ### Quick install matrix — what each path needs
 
-| Path | IntelliJ | Build JDK (Temurin 17 rec.) | Tomcat 9 | Git |
+| Path | IntelliJ | JDK 1.8 (Temurin 8) | Tomcat 9 | Git |
 |---|---|---|---|---|
-| **Run from IntelliJ** (embedded Tomcat) | required | any of A/B/C | not needed | optional |
-| **Standalone Tomcat deploy** | optional | required (system-wide) | required | optional |
+| **Run from IntelliJ** (embedded Tomcat) | required | A or B from Prereq #2 | not needed | optional |
+| **Standalone Tomcat deploy** | optional | required (system-wide, Option B) | required | optional |
 
-> The artifact itself (the WAR Maven builds) runs on **Java 8+**. The "JDK to build" column is about the developer/CI machine, not where the WAR runs.
+> The same Java 8 JDK is used for **both** building and running. There is no separate build-vs-runtime distinction here — production runs Java 8, developer machines build with Java 8.
 
 ---
 
@@ -87,15 +88,17 @@ End state: app running at `http://localhost:8080/api/health`, started inside Int
 
 IntelliJ Welcome screen → **Get from VCS** → URL: `https://github.com/mahfoudhEbkar/OAuth-2.0-JWT-Bearer-Client-.git` → pick a directory → **Clone**.
 
-### 2. Set the Project SDK (Temurin 17) and Language level (8)
+### 2. Set the Project SDK and Language level to Java 1.8
 
 `File` → `Project Structure` (`Ctrl+Alt+Shift+S`) → `Project`:
 
-- **SDK** → if empty or older than 17: click `Add SDK` → **Download JDK** → Vendor: **Eclipse Temurin**, Version: **17** → Download. (Any JDK ≥ 9 works, but 17 is the team standard.)
-- **Language level:** **8 - Lambdas, type annotations etc.** This matches `<maven.compiler.release>8</maven.compiler.release>` in `pom.xml`. After a Maven reimport, IntelliJ should auto-sync this — if it shows 17 instead, set it manually so the editor flags Java 9+ syntax (like `var` or `List.of(...)`) before you even compile.
+- **SDK** → if empty or not Java 8: click `Add SDK` → **Download JDK** → Vendor: **Eclipse Temurin**, Version: **8** → Download.
+- **Language level:** **8 - Lambdas, type annotations etc.** This matches `<java.version>1.8</java.version>` in `pom.xml`. Maven reimport auto-syncs this — if it shows 11 or 17 instead, set it manually so the editor flags Java 9+ syntax (like `var` or `List.of(...)`) before you even compile.
 - **OK**.
 
 Maven reimports automatically. Wait for the bottom-right progress bar to clear.
+
+> Do **not** point the Project SDK at IntelliJ's bundled JBR (which is JDK 17). The build will succeed, but you'll lose the compile-time guard against Java 9+ APIs sneaking in.
 
 ### 3. Generate the keystore (IntelliJ Terminal)
 
@@ -198,7 +201,7 @@ Use this path when you have a separate Tomcat 9 installation and want IntelliJ t
 
 ### Prereqs for this path
 
-- **IntelliJ** + **build JDK (Temurin 17 recommended)** — see Prerequisites #1 and #2 above. The WAR itself targets Java 8 bytecode; 17 is just the JDK on your build machine.
+- **IntelliJ** + **JDK 1.8 (Temurin 8)** — see Prerequisites #1 and #2 above. Same JDK is used to build and to run the WAR inside Tomcat.
 - **Tomcat 9** extracted to a known folder — see Prerequisites #4. Example: `C:\apache-tomcat-9.0.117`.
 - **SmartTomcat plugin** — `File` → `Settings` → `Plugins` → **Marketplace** tab → search **`SmartTomcat`** (one word) → **Install** → restart IDE.
 
@@ -230,7 +233,7 @@ foreach ($p in $searchPaths) {
         if ($found) { $keytool = $found.FullName; break }
     }
 }
-if (-not $keytool) { throw "keytool.exe not found - install Temurin 17 or download a JDK via Project Structure first" }
+if (-not $keytool) { throw "keytool.exe not found - install Temurin 8 or download a JDK via Project Structure first" }
 Write-Host "Using: $keytool"
 
 New-Item -ItemType Directory -Force keys | Out-Null
@@ -240,7 +243,7 @@ New-Item -ItemType Directory -Force keys | Out-Null
 
 Expected output (path will reflect your install):
 ```
-Using: C:\Program Files\Eclipse Adoptium\jdk-17.0.19.10-hotspot\bin\keytool.exe
+Using: C:\Program Files\Eclipse Adoptium\jdk-8.0.412.8-hotspot\bin\keytool.exe
 Generating 2,048 bit RSA key pair and self-signed certificate (SHA256withRSA) with a validity of 365 days
         for: CN=oauth2-jwt-client, O=Odea, C=US
 Certificate stored in file <keys\oauth2-client.crt>
@@ -515,14 +518,13 @@ curl -X POST http://localhost:8080/api/crypto/decrypt \
 
 For arbitrary-length payloads (entire JSON files, large records), use **hybrid encryption** — generate a random AES-256 key, encrypt the data with AES-GCM, wrap the AES key with RSA, return both. Easy extension to this controller if needed; not implemented today.
 
-## Java 8 target (already configured)
+## Java 8 end-to-end (already configured)
 
-The project compiles to **Java 8 bytecode** by default. No flag flipping needed before production. In `pom.xml`:
+The project is **Java 8 source, Java 8 bytecode, Java 8 build JDK, Java 8 runtime**. No flag flipping needed before production. In `pom.xml`:
 
 ```xml
 <properties>
     <java.version>1.8</java.version>
-    <maven.compiler.release>8</maven.compiler.release>
     ...
 </properties>
 ```
@@ -532,10 +534,10 @@ What this gets you:
 | Aspect | Value | Why |
 |---|---|---|
 | Bytecode major version | 52 (Java 8) | runs on the production Tomcat 9 host's Java 8 JVM |
-| Compile-time API surface | Java 8 only | `--release 8` blocks `List.of`, `Optional.isEmpty`, `Stream.toList`, text blocks, etc. at compile time, not at runtime |
-| Build JDK | 9+ (Temurin 17 recommended) | `--release` requires JDK 9+. JDK 8 itself cannot build this project |
-| Source syntax | Java 8 only | `var`, records, sealed classes, switch expressions, etc. are blocked |
-| Runtime JVM (where WAR runs) | Java 8 or higher | works on production Java 8; also works on 11, 17, 21 |
+| Compile-time API surface | Java 8 only | the build JDK is itself Java 8, so `List.of`, `Optional.isEmpty`, `Stream.toList`, text blocks, etc. simply do not exist and any reference fails to compile |
+| Build JDK | Temurin 8 (CI uses Temurin 8) | the same JDK we ship to. No `--release` flag needed, and `maven.compiler.release` is deliberately not set |
+| Source syntax | Java 8 only | `var`, records, sealed classes, switch expressions, etc. are blocked by the build JDK |
+| Runtime JVM (where WAR runs) | Java 8 or higher | works on production Java 8; also works on 11, 17, 21 if you ever migrate |
 
 Verify the bytecode version on any WAR:
 ```powershell

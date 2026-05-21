@@ -35,7 +35,7 @@ if [ -z "${KEYTOOL}" ]; then
     done
 fi
 if [ -z "${KEYTOOL}" ]; then
-    echo "ERROR: keytool not found. Install a JDK 17 or set KEYTOOL=<full path>." >&2
+    echo "ERROR: keytool not found. Install a JDK 1.8 or set KEYTOOL=<full path>." >&2
     exit 1
 fi
 echo "Using keytool: ${KEYTOOL}"
