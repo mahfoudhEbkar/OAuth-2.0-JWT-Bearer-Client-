@@ -23,9 +23,9 @@ OAuth 2.0 client that:
 
 ## Hard constraints — do not change without permission
 
-- **Java**: source/target compiles on JDK 17 today (`<java.version>17</java.version>`). The codebase MUST stay source-compatible with Java 1.8 for production deployment. Switch the property to `1.8` before shipping; it must still build.
-- **Spring Boot**: 2.7.18 (last 2.7.x release).
-- **Packaging**: `war`. `spring-boot-starter-tomcat` MUST be `provided` scope. `ServletInitializer` extends `SpringBootServletInitializer`.
+- **Java**: source/target/release = **Java 1.8** (`<java.version>1.8</java.version>` + `<maven.compiler.release>8</maven.compiler.release>`). Build on JDK 9+ (CI uses JDK 17); `--release 8` enforces both Java 8 syntax AND the Java 8 API surface, so Java 9+ methods like `List.of`, `Optional.isEmpty`, `Stream.toList`, text blocks, etc. fail at compile time, not at runtime on the production JVM. Do NOT remove `maven.compiler.release`.
+- **Spring Boot**: 2.7.18 (last 2.7.x release; last line that supports Java 8).
+- **Packaging**: `war`. `spring-boot-starter-tomcat` MUST be `provided` scope. `ServletInitializer` extends `SpringBootServletInitializer`. The Spring Boot Maven plugin repackages the WAR so the **same** `target/oauth2-jwt-client.war` is both (a) deployable to an external Tomcat 9 (provided-scope Tomcat jars land in `WEB-INF/lib-provided`, which external containers ignore) AND (b) executable standalone as `java -jar oauth2-jwt-client.war` (the Spring Boot launcher uses `WEB-INF/lib-provided` to bring up embedded Tomcat). One artifact, two deployment modes. Do NOT split into a separate jar build.
 - **JWT library**: `com.nimbusds:nimbus-jose-jwt:9.37.3` (last 9.x line that supports Java 8). DO NOT upgrade to 10.x.
 - **Keystore**: PKCS12 (`.p12`) only. Loaded at runtime from a file path. Never hard-code keys. Never commit keystores. The `keys/` directory and `*.p12 *.jks *.pem *.key *.crt *.csr` are in `.gitignore`.
 - **Build tool**: Maven only.
@@ -150,10 +150,12 @@ scripts/
 
 A change is done when ALL of these are true:
 
-1. `mvn clean compile` succeeds on JDK 17.
-2. The same code compiles cleanly when `<java.version>` is flipped to `1.8` (no Java 9+ syntax).
-3. `mvn test` is green.
-4. `mvn clean verify` is green.
+1. `mvn clean compile` succeeds (build JDK is 9+; output is Java 8 bytecode via `--release 8`).
+2. `mvn test` is green.
+3. `mvn clean verify` is green.
+4. The repackaged WAR runs both ways:
+   - `java -jar target/oauth2-jwt-client.war` starts on embedded Tomcat 9.
+   - The same WAR dropped into a real Tomcat 9 `webapps/` directory deploys cleanly.
 5. No secrets (tokens, JWTs, passwords, private keys) appear in any log statement.
 6. No keystore file is staged for commit (`git status` clean of `*.p12 *.key *.crt *.pem *.jks`).
 7. New configuration is documented in this file's Configuration Surface table and in `README.md`.
@@ -161,18 +163,28 @@ A change is done when ALL of these are true:
 ## Common build/run commands
 
 ```
-# Build the WAR
+# Build the executable / deployable WAR
 mvn clean package
 
 # Run the unit tests
 mvn test
 
-# Run with embedded Tomcat (dev profile)
+# --- Run modes for the built artifact ---
+
+# (a) Standalone, embedded Tomcat (no external server needed)
+java -jar target/oauth2-jwt-client.war
+
+# (b) Deployed to external Tomcat 9 (copy and let Tomcat unpack)
+cp target/oauth2-jwt-client.war $CATALINA_HOME/webapps/
+
+# Hot dev loop with embedded Tomcat (dev profile)
 mvn spring-boot:run -Dspring-boot.run.profiles=dev
 
-# Effective POM
+# Effective POM (debug build config)
 mvn help:effective-pom
 ```
+
+> **About the `.war` extension when running standalone.** Operators sometimes expect a `.jar` for `java -jar`. The Spring Boot launcher does not care about the extension — `java -jar target/oauth2-jwt-client.war` works. If a downstream tool insists on `.jar`, copy/rename: `cp target/oauth2-jwt-client.war target/oauth2-jwt-client.jar`. Do NOT change `<packaging>` to `jar` — it breaks external Tomcat deployment because `ServletInitializer` is no longer wired and Tomcat libs get bundled instead of provided.
 
 ## When in doubt
 

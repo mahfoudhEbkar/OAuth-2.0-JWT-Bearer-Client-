@@ -20,8 +20,16 @@
     <description>OAuth 2.0 client using private_key_jwt (RFC 7523) to call protected APIs</description>
 
     <properties>
-        <!-- Switch to 1.8 before shipping to production infrastructure. -->
-        <java.version>17</java.version>
+        <!--
+            Production runtime target. We build on JDK 9+ (CI uses JDK 17) and
+            cross-compile to Java 8 bytecode + API surface via maven.compiler.release.
+            Do NOT remove maven.compiler.release - it is what stops Java 9+ APIs
+            (List.of, Optional.isEmpty, Stream.toList, etc.) from sneaking in at
+            compile time. <java.version> alone only controls source/target, not
+            the JDK module surface.
+        -->
+        <java.version>1.8</java.version>
+        <maven.compiler.release>8</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <nimbus-jose-jwt.version>9.37.3</nimbus-jose-jwt.version>
