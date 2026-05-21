@@ -3,11 +3,48 @@
 Spring Boot 2.7.18 WAR that authenticates to an OAuth 2.0 Authorization Server using the **private_key_jwt** method (RFC 7523, `urn:ietf:params:oauth:client-assertion-type:jwt-bearer`), exchanges the assertion for an access token via the `client_credentials` grant, caches the token, and calls a protected third-party API with `Authorization: Bearer {token}`.
 
 - **Owner:** Ebkar, Mahfoudh
-- **Java:** builds on 17 today, source-compatible with 1.8 for production
-- **Container target:** Apache Tomcat 9 (external)
+- **Java:** JDK 1.8 end-to-end (build, bytecode, runtime)
+- **Container target:** Apache Tomcat 9 (external) **or** embedded (`java -jar`)
 - **Build tool:** Maven
 
 For the full set of architectural rules, security constraints, and the Java 8 compatibility checklist, see [CLAUDE.md](CLAUDE.md).
+
+## Recent changes (read this before re-cloning on a client PC)
+
+If you cloned an older version of this repo and are pulling for the first time, two things changed and you may need to react.
+
+### 1. The project now targets JDK 1.8 end-to-end (was JDK 17 build / Java 8 runtime)
+
+- `pom.xml` now has `<java.version>1.8</java.version>` and **no** `<maven.compiler.release>` entry. Source, bytecode, build JDK, and runtime are all Java 8.
+- CI builds on **Temurin 8** (was Temurin 17). The previous separate "Java 8 source-compat check" job is gone — building on Temurin 8 inherently enforces the Java 8 API surface, so the second job became redundant.
+- The build JDK on **your machine** should be Temurin 8 to exactly match CI. If you still have Temurin 17 installed, the build will still succeed locally (Maven happily produces Java 8 bytecode from JDK 17), but a Java 9+ API reference would slip past your local build and only get caught when you push to CI. To install Temurin 8 alongside any existing JDK on Windows: `winget install EclipseAdoptium.Temurin.8.JDK --accept-source-agreements --accept-package-agreements`.
+- In IntelliJ: `File` → `Project Structure` → `Project` → **SDK = Temurin 8**, **Language level = 8**.
+- The previous "Switching to Java 1.8 for production" section in this README is gone — there is nothing to switch anymore.
+
+### 2. The built WAR is now a dual-mode artifact (Tomcat-deployable **and** runnable as `java -jar`)
+
+- `mvn clean package` produces a single file: `target/oauth2-jwt-client.war`.
+- This **same** WAR runs two ways:
+  - **(a) Standalone, no external server:** `java -jar target/oauth2-jwt-client.war`. Spring Boot's launcher boots an embedded Tomcat 9 from `WEB-INF/lib-provided/` inside the WAR.
+  - **(b) Deployed to a real Tomcat 9:** `cp target/oauth2-jwt-client.war $CATALINA_HOME/webapps/`. External Tomcat ignores `WEB-INF/lib-provided/` and uses its own server libraries — no conflict.
+- We did **not** add a separate JAR build. One artifact, two deployment modes. If a downstream tool wants a `.jar` filename, just copy: `cp target/oauth2-jwt-client.war target/oauth2-jwt-client.jar`. The Spring Boot launcher does not care about the extension.
+- Do **not** change `<packaging>war</packaging>` to `jar` in `pom.xml` — it breaks the Tomcat-deploy path. CLAUDE.md flags this as a hard constraint.
+
+### What did **not** change
+
+- All OAuth 2.0 logic, JWT claim building, token caching, retry-on-401, and the RSA encrypt/decrypt REST endpoints (`/api/crypto/*`) are unchanged.
+- The keystore format (PKCS12), keystore generation script, and env-var configuration surface are unchanged.
+- Spring Boot stays on 2.7.18, Nimbus JOSE on 9.37.3, Tomcat target stays at 9.x (not 10).
+- The location of secrets (env vars, not the repo) is unchanged. `keys/` is still git-ignored.
+
+### What you must do on a client PC after pulling
+
+1. `git pull origin main`.
+2. Install Temurin 8 if you don't already have it (see Prereq #2 below).
+3. In IntelliJ, set Project SDK to Temurin 8 and Language level to 8 (one-time, see "Set the Project SDK" step below).
+4. `mvn clean package` — you should see `BUILD SUCCESS` and 16 tests passing.
+5. (Optional) confirm the WAR is Java 8 bytecode: `unzip -p target/oauth2-jwt-client.war WEB-INF/classes/com/odea/oauth2client/Application.class | head -c 8 | od -An -tx1` — last byte should be `34` (= class major version 52 = Java 8).
+6. Run it either way: `java -jar target/oauth2-jwt-client.war` OR drop into your Tomcat 9 `webapps/` directory.
 
 ## Prerequisites — install these first
 
