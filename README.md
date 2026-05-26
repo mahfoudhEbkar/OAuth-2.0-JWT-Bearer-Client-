@@ -30,9 +30,18 @@ If you cloned an older version of this repo and are pulling for the first time, 
 - We did **not** add a separate JAR build. One artifact, two deployment modes. If a downstream tool wants a `.jar` filename, just copy: `cp target/oauth2-jwt-client.war target/oauth2-jwt-client.jar`. The Spring Boot launcher does not care about the extension.
 - Do **not** change `<packaging>war</packaging>` to `jar` in `pom.xml` — it breaks the Tomcat-deploy path. CLAUDE.md flags this as a hard constraint.
 
+### 3. Crypto endpoints now accept and return native JSON (no `\"` escaping)
+
+- `POST /api/crypto/encrypt` — the `data` field now accepts a JSON **object**, **array**, or **string**. Sending `{"data":{"firstname":"mahfoudh","id":42}}` works directly; you no longer have to encode it as `{"data":"{\"firstname\":\"mahfoudh\"}"}`.
+- `POST /api/crypto/decrypt` — when the plaintext was a JSON object or array, the response field `data` comes back as a real object/array (no `\"` in sight). When the plaintext was a plain string, `data` is still a string. Round-trips preserve shape.
+- Validation failures (e.g. missing `data`) now return **HTTP 400** with a structured `{ "error": "validation_failure", "fields": [...] }` body instead of a generic 500.
+- The underlying crypto and the keystore behavior are unchanged — same RSA-OAEP-SHA-256 algorithm, same ~190-byte plaintext limit. Only the controller's request/response shape changed.
+- See [Recent changes #4 below](#api-endpoints) for the full updated payload examples.
+
 ### What did **not** change
 
-- All OAuth 2.0 logic, JWT claim building, token caching, retry-on-401, and the RSA encrypt/decrypt REST endpoints (`/api/crypto/*`) are unchanged.
+- All OAuth 2.0 logic, JWT claim building, token caching, and retry-on-401 are unchanged.
+- The RSA algorithm, key handling, and size limits (`/api/crypto/*` business logic) are unchanged — only the HTTP-layer JSON shape changed.
 - The keystore format (PKCS12), keystore generation script, and env-var configuration surface are unchanged.
 - Spring Boot stays on 2.7.18, Nimbus JOSE on 9.37.3, Tomcat target stays at 9.x (not 10).
 - The location of secrets (env vars, not the repo) is unchanged. `keys/` is still git-ignored.
@@ -492,10 +501,10 @@ curl http://localhost:8080/api/proxy/your/api/path
 |---|---|---|
 | GET | `/api/health` | `{"status":"UP","clientId":"<masked>"}` |
 | GET | `/api/proxy/{*path}` | Forwards to `OAUTH2_API_BASE_URL/{path}` with bearer token |
-| POST | `/api/crypto/encrypt` | RSA-encrypts a JSON string field with the keystore's public key; returns base64 ciphertext |
-| POST | `/api/crypto/decrypt` | RSA-decrypts a base64 ciphertext with the keystore's private key; returns the original plaintext |
+| POST | `/api/crypto/encrypt` | RSA-encrypts the `data` field — accepts a string OR a JSON object/array directly; returns base64 ciphertext |
+| POST | `/api/crypto/decrypt` | RSA-decrypts a base64 ciphertext; returns `data` as native JSON when the plaintext was an object/array, as a string otherwise |
 
-### RSA encrypt / decrypt — Postman or curl
+### RSA encrypt / decrypt — Postman / Bruno / curl
 
 Endpoint: **`POST http://localhost:8080/api/crypto/encrypt`** (embedded) or **`http://localhost:8080/oauth2-jwt-client/api/crypto/encrypt`** (standalone Tomcat).
 
@@ -504,14 +513,30 @@ Headers:
 Content-Type: application/json
 ```
 
-Request body:
+The `data` field accepts any JSON value — string, object, array. No backslash escaping required when sending JSON.
+
+**Request body — JSON object (recommended for structured payloads):**
 ```json
 {
-  "data": "hello world {\"x\":42}"
+  "data": { "firstname": "mahfoudh", "id": 42 }
 }
 ```
 
-Response (HTTP 200):
+**Request body — plain string (still works, back-compat):**
+```json
+{
+  "data": "hello world"
+}
+```
+
+**Request body — array:**
+```json
+{
+  "data": [1, 2, 3]
+}
+```
+
+**Response (HTTP 200) — same shape for all three above:**
 ```json
 {
   "algorithm": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
@@ -520,30 +545,59 @@ Response (HTTP 200):
 }
 ```
 
-Roundtrip with `POST /api/crypto/decrypt`:
+Server-side: structured `data` is serialized to canonical JSON (`{"firstname":"mahfoudh","id":42}`) before being passed to the RSA cipher. The serialization is deterministic — same input bytes every time — so identical payloads encrypt to ciphertexts of identical length.
+
+**Roundtrip with `POST /api/crypto/decrypt`:**
 ```json
 {
   "encrypted": "<paste the value from /encrypt here>"
 }
 ```
 
-Returns:
+**Returns (when the plaintext was a JSON object) — `data` is a real object, no `\"` anywhere:**
 ```json
 {
   "algorithm": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
-  "data": "hello world {\"x\":42}"
+  "data": { "firstname": "mahfoudh", "id": 42 }
 }
 ```
 
-curl equivalents:
+**Returns (when the plaintext was a plain string):**
+```json
+{
+  "algorithm": "RSA/ECB/OAEPWithSHA-256AndMGF1Padding",
+  "data": "hello world"
+}
+```
+
+Only JSON **objects and arrays** are deserialized back to native JSON in the response. A bare number like `42` is kept as the string `"42"` to avoid silently changing a caller's text payload into a JSON number on the way back.
+
+**curl equivalents:**
 ```bash
+# Encrypt a JSON object directly (no escaping)
+curl -X POST http://localhost:8080/api/crypto/encrypt \
+  -H "Content-Type: application/json" \
+  -d '{"data":{"firstname":"mahfoudh","id":42}}'
+
+# Encrypt a plain string
 curl -X POST http://localhost:8080/api/crypto/encrypt \
   -H "Content-Type: application/json" \
   -d '{"data":"hello world"}'
 
+# Decrypt
 curl -X POST http://localhost:8080/api/crypto/decrypt \
   -H "Content-Type: application/json" \
   -d '{"encrypted":"<base64>"}'
+```
+
+**Validation errors** (e.g. missing `data` field): the server returns HTTP 400 with a structured field list, not a 500:
+```json
+{
+  "error": "validation_failure",
+  "fields": [
+    { "field": "data", "message": "must not be null" }
+  ]
+}
 ```
 
 **Algorithm:** `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` (modern OAEP, IND-CCA2 secure). The "ECB" token in the JCE transformation name is a historical misnomer — it does not mean ECB block-cipher mode (RSA is not a block cipher).
