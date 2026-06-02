@@ -241,6 +241,71 @@ Stop with the red ■ in the Run window.
 
 ---
 
+## Deploy to a Windows Server (production)
+
+Use this path on a real Windows Server that has Tomcat 9 installed. The deploy splits into a **one-time setup** (per server, run once) and a **redeploy** loop (run every time you ship a new WAR).
+
+### One-time setup — `scripts\windows-server-setup.ps1`
+
+Run **as Administrator** on the Windows Server. The script is idempotent — safe to re-run, won't overwrite an existing keystore.
+
+```powershell
+# RDP in, open PowerShell as Administrator, then:
+cd C:\path\to\OAuth-2.0-JWT-Bearer-Client-
+.\scripts\windows-server-setup.ps1 `
+  -TomcatHome      "C:\apache-tomcat-9.0.117" `
+  -ClientId        "your-client-id-from-AS" `
+  -TokenEndpoint   "https://as.example.com/oauth2/token" `
+  -Scope           "api.read api.write" `
+  -KeyId           "prod-key-2026" `
+  -ApiBaseUrl      "https://api.example.com" `
+  -KeystorePassword "REPLACE-WITH-STRONG-PASSWORD"
+```
+
+What it does, in order:
+
+1. Verifies (and if missing, installs via winget) Temurin 8 JDK.
+2. Creates `$TomcatHome\conf\oauth2\`, locks its NTFS ACL to `NT SERVICE\Tomcat9` (read) + Administrators (full).
+3. Generates a 2048-bit RSA PKCS12 keystore at `conf\oauth2\oauth2-client.p12` and a matching public cert at `conf\oauth2\oauth2-client.crt` — only if the keystore does not already exist. The keystore stays on the server **forever**; you hand the `.crt` (public half) to the AS admin team.
+4. Writes `$TomcatHome\bin\setenv.bat` with all the `OAUTH2_*` env vars Tomcat picks up at startup. Also locked-down.
+5. Opens TCP 8080 inbound in Windows Firewall (Domain + Private profiles).
+6. Prints the server's IPv4 address and the redeploy commands.
+
+After this script runs once, **every subsequent deploy is just three commands** — see below.
+
+### Redeploy (every time you publish a new WAR)
+
+```powershell
+$tomcat = "C:\apache-tomcat-9.0.117"
+
+Stop-Service Tomcat9
+Invoke-WebRequest `
+  -Uri https://github.com/mahfoudhEbkar/OAuth-2.0-JWT-Bearer-Client-/releases/download/v1.0.0/oauth2-jwt-client.war `
+  -OutFile "$tomcat\webapps\oauth2-jwt-client.war"
+Remove-Item -Recurse -Force "$tomcat\webapps\oauth2-jwt-client\" -ErrorAction SilentlyContinue
+Start-Service Tomcat9
+```
+
+Replace `v1.0.0` with whatever GitHub Release tag you're shipping.
+
+### Test from your laptop / Bruno / Postman
+
+The setup script prints the server's IP. Reach the app at:
+
+```
+http://<server-ip>:8080/oauth2-jwt-client/api/health
+http://<server-ip>:8080/oauth2-jwt-client/api/crypto/encrypt
+http://<server-ip>:8080/oauth2-jwt-client/api/crypto/decrypt
+```
+
+### Why the keystore lives **outside** the WAR, not inside it
+
+This is a deliberate security boundary. Putting the `.p12` inside the WAR means: anyone with the WAR file (a GitHub Release attachment, a backup, a Docker image layer, a Maven mirror, a USB stick) has the private key. Rotation becomes "rebuild the artifact" instead of "swap a file and restart." Per-environment keys (dev/staging/prod must be different) become three separate WAR builds. None of that scales.
+
+External keystore + `OAUTH2_KEYSTORE_PATH` env var = one WAR per release, N keystores (one per host or one per environment), independent rotation. The setup script makes external-keystore as low-friction as bundled — one command, done.
+
+> If your environment genuinely requires a bundled keystore (air-gapped network, no other admins, no backups leaving the box), see CLAUDE.md for the risk note and ask before changing the layout — it would override a hard project constraint.
+
 ## Deploy to standalone Tomcat 9 via Smart Tomcat (IntelliJ)
 
 Use this path when you have a separate Tomcat 9 installation and want IntelliJ to deploy the WAR into it (mimics production layout). End state: app running at `http://localhost:8080/oauth2-jwt-client/api/health`, served by the external Tomcat process, started and stopped from inside IntelliJ.
