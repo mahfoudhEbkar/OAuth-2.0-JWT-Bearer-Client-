@@ -9,6 +9,21 @@ Spring Boot 2.7.18 WAR that authenticates to an OAuth 2.0 Authorization Server u
 
 For the full set of architectural rules, security constraints, and the Java 8 compatibility checklist, see [CLAUDE.md](CLAUDE.md).
 
+## Documentation / Wiki
+
+Wiki-style pages live under [`docs/wiki/`](docs/wiki/) — start at [Home](docs/wiki/Home.md). Also published to the GitHub Wiki tab (see [`scripts/publish-wiki.ps1`](scripts/publish-wiki.ps1) for the one-command sync).
+
+| Page | Purpose |
+|---|---|
+| [Home](docs/wiki/Home.md) | Landing page + navigation |
+| [Architecture](docs/wiki/Architecture.md) | Six-package layout, class-by-class walkthrough, request flow diagrams |
+| [Getting Started](docs/wiki/Getting-Started.md) | Clone → keystore → build → run in ~5 minutes |
+| [API Reference](docs/wiki/API-Reference.md) | Every endpoint with clean-JSON request/response bodies (Bruno / Postman / curl) |
+| [Deployment](docs/wiki/Deployment.md) | Standalone vs external Tomcat 9; full Windows Server production runbook |
+| [Cryptography](docs/wiki/Cryptography.md) | RSA-OAEP-SHA-256 deep dive; encrypt/decrypt flow, size limit, keystore lifecycle |
+| [Configuration](docs/wiki/Configuration.md) | Complete env-var table; Spring property precedence |
+| [Troubleshooting](docs/wiki/Troubleshooting.md) | Symptom → cause → fix for every common failure |
+
 ## Recent changes (read this before re-cloning on a client PC)
 
 If you cloned an older version of this repo and are pulling for the first time, two things changed and you may need to react.
